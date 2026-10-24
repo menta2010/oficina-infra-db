@@ -1,0 +1,7 @@
+aws_region  = "us-east-1"
+environment = "homolog"
+
+# Em prod:
+# multi_az              = true
+# deletion_protection   = true
+# backup_retention_days = 7
