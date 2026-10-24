@@ -1,0 +1,90 @@
+name: CI/CD
+
+# PR: fmt + validate + plan | develop -> apply em homolog | main -> apply em prod
+on:
+  pull_request:
+    branches: [ develop, main ]
+  push:
+    branches: [ develop, main ]
+  workflow_dispatch:
+
+concurrency:
+  group: infra-db-${{ github.ref }}
+  cancel-in-progress: false   # nunca interromper um apply no meio
+
+env:
+  TF_VERSION: '1.13.0'
+
+jobs:
+  validate:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  plan:
+    name: Terraform plan (${{ github.base_ref == 'main' && 'prod' || 'homolog' }})
+    needs: validate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: ${{ github.base_ref == 'main' && 'prod' || 'homolog' }}
+    env:
+      AMBIENTE: ${{ github.base_ref == 'main' && 'prod' || 'homolog' }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - name: Terraform plan
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=oficina/infra-db/${AMBIENTE}.tfstate" \
+            -backend-config="region=${AWS_REGION}"
+          terraform plan -input=false -var="environment=${AMBIENTE}" -var="aws_region=${AWS_REGION}" ${{ vars.TF_EXTRA_ARGS }}
+
+  apply:
+    name: Terraform apply (${{ github.ref_name == 'main' && 'prod' || 'homolog' }})
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'prod' || 'homolog' }}
+    env:
+      AMBIENTE: ${{ github.ref_name == 'main' && 'prod' || 'homolog' }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - name: Terraform apply
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=oficina/infra-db/${AMBIENTE}.tfstate" \
+            -backend-config="region=${AWS_REGION}"
+          terraform apply -auto-approve -input=false -var="environment=${AMBIENTE}" -var="aws_region=${AWS_REGION}" ${{ vars.TF_EXTRA_ARGS }}
+      - name: Banco disponivel
+        run: |
+          aws rds wait db-instance-available --db-instance-identifier "oficina-${AMBIENTE}-postgres"
+          aws rds describe-db-instances --db-instance-identifier "oficina-${AMBIENTE}-postgres" \
+            --query 'DBInstances[0].[DBInstanceStatus,Engine,EngineVersion,MultiAZ]' --output table
