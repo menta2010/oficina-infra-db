@@ -9,9 +9,19 @@ Repositório 3 de 4 do Tech Challenge da Fase 3 (SOAT):
 | oficina-lambda-auth | Lambdas de autenticação (CPF e funcionário) e job de inativação de clientes |
 | oficina-infra-k8s | VPC, cluster EKS, API Gateway, segredo do JWT, tópico SNS |
 | **oficina-infra-db** (este) | RDS PostgreSQL, security groups e segredo do banco |
-| oficina-app | API de ordens de serviço rodando no Kubernetes |
+| [tech-challenge-oficina-mecanica](https://github.com/menta2010/tech-challenge-oficina-mecanica) | API de ordens de serviço rodando no Kubernetes |
 
 **Ordem de deploy:** infra-k8s → **infra-db** → lambda-auth → app. Este repositório usa a VPC e o cluster EKS já existentes.
+
+## Links
+
+| Item | Link |
+| --- | --- |
+| API publicada (prod) | https://7d2ypan7l9.execute-api.us-east-1.amazonaws.com |
+| Swagger | https://7d2ypan7l9.execute-api.us-east-1.amazonaws.com/swagger |
+| Collection Postman | [oficina-fase3.postman_collection.json](https://github.com/menta2010/tech-challenge-oficina-mecanica/blob/master/docs/postman/oficina-fase3.postman_collection.json) |
+
+O ambiente roda no AWS Academy: a URL só responde enquanto o laboratório está ligado.
 
 ## O que é provisionado
 
